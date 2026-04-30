@@ -20,7 +20,7 @@ yarn dev
 pnpm dev
 ```
 
-Open [[http://localhost:3000](https://v0-skilldebt-ai-detector.vercel.app/dashboard)] with your browser to see the result.
+Open [[project](https://v0-skilldebt-ai-detector.vercel.app/dashboard)] with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
