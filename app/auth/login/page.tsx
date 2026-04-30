@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { retryWithBackoff } from '@/lib/email-rate-limit'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -29,14 +30,24 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
+      await retryWithBackoff(
+        async () => {
+          const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+          if (error) throw error
+        },
+        { maxRetries: 2 },
+        (attempt, err) => {
+          console.log(`[v0] Login attempt ${attempt} failed:`, err.message)
+        }
+      )
       router.push('/dashboard')
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred')
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred'
+      console.error('[v0] Login error:', errorMessage)
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -77,7 +88,11 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
+                  {error && (
+                    <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+                      ❌ {error}
+                    </p>
+                  )}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Logging in...' : 'Log In'}
                   </Button>

@@ -14,12 +14,19 @@ import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import {
+  retryWithBackoff,
+  trackEmailAttempt,
+  isApproachingQuotaLimit,
+  generateRateLimitErrorMessage,
+} from '@/lib/email-rate-limit'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -28,6 +35,7 @@ export default function SignUpPage() {
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
+    setWarning(null)
 
     if (password !== repeatPassword) {
       setError('Passwords do not match')
@@ -35,20 +43,50 @@ export default function SignUpPage() {
       return
     }
 
+    // Check if approaching rate limit
+    if (isApproachingQuotaLimit(email)) {
+      setWarning(
+        'You are approaching the sign-up limit. Please wait before trying again.'
+      )
+    }
+
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-            `${window.location.origin}/auth/callback`,
+      // Track email attempt
+      const { isLimited } = trackEmailAttempt(email)
+
+      if (isLimited) {
+        throw new Error(generateRateLimitErrorMessage(email))
+      }
+
+      // Retry with exponential backoff
+      await retryWithBackoff(
+        async () => {
+          const { error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo:
+                process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+                `${window.location.origin}/auth/callback`,
+            },
+          })
+          if (signUpError) throw signUpError
         },
-      })
-      if (error) throw error
+        { maxRetries: 3 },
+        (attempt, err, delay) => {
+          console.log(
+            `[v0] Sign-up attempt ${attempt} failed. Retrying in ${delay}ms...`,
+            err.message
+          )
+        }
+      )
+
       router.push('/auth/sign-up-success')
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred')
+      const errorMessage =
+        error instanceof Error ? error.message : 'An error occurred'
+      console.error('[v0] Sign-up error:', errorMessage)
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -97,7 +135,16 @@ export default function SignUpPage() {
                       onChange={(e) => setRepeatPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
+                  {warning && (
+                    <p className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
+                      ⚠️ {warning}
+                    </p>
+                  )}
+                  {error && (
+                    <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+                      ❌ {error}
+                    </p>
+                  )}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Creating account...' : 'Sign Up'}
                   </Button>
