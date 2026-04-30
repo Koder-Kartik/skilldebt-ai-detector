@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardHeader } from '@/components/dashboard-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PastQuizzesTab } from '@/components/quiz/past-quizzes-tab'
 
-export default function DiagnosisPage() {
+function DiagnosisPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [diagnosis, setDiagnosis] = useState('')
@@ -18,6 +20,7 @@ export default function DiagnosisPage() {
   const level = searchParams.get('level') || ''
   const experience = searchParams.get('experience') || ''
   const goals = searchParams.get('goals') || ''
+  const method = searchParams.get('method') || 'quiz'
 
   useEffect(() => {
     const fetchDiagnosis = async () => {
@@ -70,58 +73,101 @@ export default function DiagnosisPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Your {skill} Skill Diagnosis</CardTitle>
             <p className="mt-2 text-sm text-gray-600">
-              Based on your current level ({level}) and experience
+              {method === 'quiz' ? 'Based on your quiz performance' : `Based on your current level (${level}) and experience`}
             </p>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center space-y-4 py-12">
-                <Spinner className="h-8 w-8" />
-                <p className="text-gray-600">Analyzing your skills and creating a personalized diagnosis...</p>
-              </div>
-            ) : error ? (
-              <div className="space-y-4">
-                <p className="text-sm text-red-600">{error}</p>
-                <Button onClick={() => router.push('/assessment')} variant="outline">
-                  Try Again
-                </Button>
-              </div>
+            {method === 'manual' ? (
+              <>
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center space-y-4 py-12">
+                    <Spinner className="h-8 w-8" />
+                    <p className="text-gray-600">Analyzing your skills and creating a personalized diagnosis...</p>
+                  </div>
+                ) : error ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-red-600">{error}</p>
+                    <Button onClick={() => router.push('/assessment')} variant="outline">
+                      Try Again
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <Tabs defaultValue="diagnosis" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
+                        <TabsTrigger value="history">Quiz History</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="diagnosis" className="space-y-6">
+                        <div className="prose max-w-none">
+                          {diagnosis.split('\n').map((line, i) => {
+                            if (line.startsWith('##')) {
+                              return (
+                                <h3 key={i} className="mt-6 text-lg font-semibold text-gray-900">
+                                  {line.replace(/^##\s*/, '')}
+                                </h3>
+                              )
+                            }
+                            if (line.startsWith('#')) {
+                              return (
+                                <h2 key={i} className="mt-8 text-xl font-bold text-gray-900">
+                                  {line.replace(/^#\s*/, '')}
+                                </h2>
+                              )
+                            }
+                            if (line.startsWith('- ')) {
+                              return (
+                                <li key={i} className="ml-6 list-disc text-gray-700">
+                                  {line.replace(/^- /, '')}
+                                </li>
+                              )
+                            }
+                            if (line.trim() === '') {
+                              return <div key={i} className="h-2" />
+                            }
+                            return (
+                              <p key={i} className="text-gray-700">
+                                {line}
+                              </p>
+                            )
+                          })}
+                        </div>
+
+                        <div className="space-y-3 border-t border-gray-200 pt-6">
+                          <Button
+                            onClick={() =>
+                              router.push(`/learning-path/${encodeURIComponent(skill)}`)
+                            }
+                            className="w-full"
+                          >
+                            Create Learning Path
+                          </Button>
+                          <Button
+                            onClick={() => router.push('/dashboard')}
+                            variant="outline"
+                            className="w-full"
+                          >
+                            Back to Dashboard
+                          </Button>
+                        </div>
+                      </TabsContent>
+                      <TabsContent value="history">
+                        <PastQuizzesTab skillName={skill} />
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-6">
-                <div className="prose max-w-none">
-                  {diagnosis.split('\n').map((line, i) => {
-                    if (line.startsWith('##')) {
-                      return (
-                        <h3 key={i} className="mt-6 text-lg font-semibold text-gray-900">
-                          {line.replace(/^##\s*/, '')}
-                        </h3>
-                      )
-                    }
-                    if (line.startsWith('#')) {
-                      return (
-                        <h2 key={i} className="mt-8 text-xl font-bold text-gray-900">
-                          {line.replace(/^#\s*/, '')}
-                        </h2>
-                      )
-                    }
-                    if (line.startsWith('- ')) {
-                      return (
-                        <li key={i} className="ml-6 list-disc text-gray-700">
-                          {line.replace(/^- /, '')}
-                        </li>
-                      )
-                    }
-                    if (line.trim() === '') {
-                      return <div key={i} className="h-2" />
-                    }
-                    return (
-                      <p key={i} className="text-gray-700">
-                        {line}
-                      </p>
-                    )
-                  })}
-                </div>
-
+                <Tabs defaultValue="history" className="w-full">
+                  <TabsList className="grid w-full grid-cols-1">
+                    <TabsTrigger value="history">Quiz History</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="history">
+                    <PastQuizzesTab skillName={skill} />
+                  </TabsContent>
+                </Tabs>
                 <div className="space-y-3 border-t border-gray-200 pt-6">
                   <Button
                     onClick={() =>
@@ -145,5 +191,13 @@ export default function DiagnosisPage() {
         </Card>
       </main>
     </div>
+  )
+}
+
+export default function DiagnosisPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12">Loading...</div>}>
+      <DiagnosisPageContent />
+    </Suspense>
   )
 }

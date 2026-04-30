@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import { DiagnosisEntry } from '@/components/quiz/diagnosis-entry'
 
 const skillSuggestions = [
   'React',
@@ -39,9 +40,16 @@ export default function AssessmentPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showDiagnosisChoice, setShowDiagnosisChoice] = useState(false)
+  const [selectedDiagnosisMethod, setSelectedDiagnosisMethod] = useState<'quiz' | 'manual' | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setShowDiagnosisChoice(true)
+  }
+
+  const handleDiagnosisStart = async (method: 'quiz' | 'manual') => {
+    setSelectedDiagnosisMethod(method)
     setIsLoading(true)
     setError(null)
 
@@ -85,14 +93,18 @@ export default function AssessmentPage() {
 
       if (progressError) throw progressError
 
-      // Redirect to diagnosis
-      router.push(
-        `/diagnosis?skill=${encodeURIComponent(skillName)}&level=${level}&experience=${encodeURIComponent(experience)}&goals=${encodeURIComponent(goals)}`
-      )
+      // Redirect to appropriate diagnosis page
+      if (method === 'quiz') {
+        router.push(`/assessment/quiz?skill=${encodeURIComponent(skillName)}`)
+      } else {
+        router.push(
+          `/diagnosis?skill=${encodeURIComponent(skillName)}&level=${level}&experience=${encodeURIComponent(experience)}&goals=${encodeURIComponent(goals)}&method=manual`
+        )
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
       setIsLoading(false)
+      setShowDiagnosisChoice(false)
     }
   }
 
@@ -104,6 +116,21 @@ export default function AssessmentPage() {
   const handleSuggestionClick = (suggestion: string) => {
     setSkillName(suggestion)
     setShowSuggestions(false)
+  }
+
+  if (showDiagnosisChoice && !isLoading) {
+    return (
+      <div className="min-h-svh bg-gray-50">
+        <DashboardHeader />
+        <main>
+          <DiagnosisEntry
+            skillName={skillName}
+            onQuizStart={() => handleDiagnosisStart('quiz')}
+            onManualStart={() => handleDiagnosisStart('manual')}
+          />
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -203,10 +230,10 @@ export default function AssessmentPage() {
                 {isLoading ? (
                   <>
                     <Spinner className="mr-2" />
-                    Analyzing Your Skills...
+                    Setting Up Assessment...
                   </>
                 ) : (
-                  'Continue to AI Diagnosis'
+                  'Choose Diagnosis Method'
                 )}
               </Button>
 
