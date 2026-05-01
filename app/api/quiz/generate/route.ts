@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateText } from 'ai'
+import { groq } from '@ai-sdk/groq'
 import { NextRequest } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -39,9 +40,9 @@ export async function POST(req: NextRequest) {
       throw sessionError
     }
 
-    // Generate questions using AI (using AI Gateway)
+    // Generate questions using AI (using Groq - Free!)
     const { text } = await generateText({
-      model: 'openai/gpt-4-turbo',
+      model: groq('mixtral-8x7b-32768'),
       system: `You are an expert assessment specialist. Generate exactly 5 multiple-choice questions to assess someone's understanding of ${skillName}. 
       
 Return a JSON array with exactly this structure for each question:

@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { groq } from '@ai-sdk/groq'
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
@@ -63,7 +64,7 @@ Provide practical, actionable tasks. Format as valid JSON only.`
     console.log('[v0] Generating learning path for skill:', skill, 'level:', level)
     
     const result = await generateText({
-      model: 'openai/gpt-4-turbo',
+      model: groq('mixtral-8x7b-32768'),
       system:
         'You are an expert curriculum designer. Create detailed, structured learning paths with practical tasks and exercises. Always respond with valid JSON.',
       prompt,
