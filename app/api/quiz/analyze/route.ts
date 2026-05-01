@@ -5,9 +5,12 @@ import { NextRequest } from 'next/server'
 export async function POST(req: NextRequest) {
   try {
     const { quizSessionId, answers, skillName } = await req.json()
+    console.log('[v0] Analyzing quiz submission:', { sessionId: quizSessionId, answerCount: answers?.length })
 
-    if (!quizSessionId || !answers) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+    if (!quizSessionId || !answers || !Array.isArray(answers) || answers.length === 0) {
+      const errorMsg = 'Missing or invalid required fields'
+      console.error('[v0] Validation error:', errorMsg, { quizSessionId, answers })
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: 400,
       })
     }
@@ -107,10 +110,12 @@ Identify gaps and how they relate to each other.`,
     }
 
     // Update quiz session with results
+    console.log('[v0] Updating quiz session with results:', { score, correctCount, assessment: overallAssessment })
     const { error: updateError } = await supabase
       .from('quiz_sessions')
       .update({
         correct_answers: correctCount,
+        total_questions: answers.length,
         score: score,
         overall_assessment: overallAssessment,
         gap_chain: gapData.gapChain,
@@ -123,21 +128,27 @@ Identify gaps and how they relate to each other.`,
       .eq('id', quizSessionId)
 
     if (updateError) {
+      console.error('[v0] Error updating quiz session:', updateError)
       throw updateError
     }
 
+    console.log('[v0] Quiz session updated, now saving gaps:', gapData.gaps?.length || 0)
     // Save identified gaps
     for (const gap of gapData.gaps || []) {
-      await supabase.from('quiz_gaps').insert({
+      const { error: gapError } = await supabase.from('quiz_gaps').insert({
         quiz_session_id: quizSessionId,
         gap_description: gap.description,
         gap_category: gap.category,
         severity: gap.severity,
-        related_questions: gap.relatedQuestions,
+        related_questions: gap.relatedQuestions || [],
         learning_resources: [],
       })
+      if (gapError) {
+        console.error('[v0] Error saving gap:', gapError)
+      }
     }
 
+    console.log('[v0] Quiz analysis complete, returning results')
     return new Response(
       JSON.stringify({
         score: score,
@@ -148,7 +159,7 @@ Identify gaps and how they relate to each other.`,
         gapChain: gapData.gapChain,
         recommendations: gapData.recommendations,
       }),
-      { status: 200 }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     console.error('[v0] Quiz analysis error:', error)

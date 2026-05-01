@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { groq } from '@ai-sdk/groq'
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
@@ -60,12 +61,16 @@ Structure the response as a JSON object with this schema:
 
 Provide practical, actionable tasks. Format as valid JSON only.`
 
+    console.log('[v0] Generating learning path for skill:', skill, 'level:', level)
+    
     const result = await generateText({
-      model: 'openai/gpt-4-turbo',
+      model: groq('mixtral-8x7b-32768'),
       system:
         'You are an expert curriculum designer. Create detailed, structured learning paths with practical tasks and exercises. Always respond with valid JSON.',
       prompt,
     })
+    
+    console.log('[v0] Learning path generated, parsing response...')
 
     if (!result.text) {
       throw new Error('No response from AI')
@@ -108,9 +113,31 @@ Provide practical, actionable tasks. Format as valid JSON only.`
 
     if (saveError) throw saveError
 
+    console.log('[v0] Learning path saved to database')
     return Response.json(pathData)
   } catch (error) {
-    console.error('Learning path error:', error)
-    return new Response('Internal server error', { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[v0] Learning path generation error:', {
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    })
+    
+    // Return helpful error response
+    if (errorMessage.includes('Unauthorized')) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401 })
+    }
+    
+    if (errorMessage.includes('API') || errorMessage.includes('auth')) {
+      return new Response(
+        JSON.stringify({ error: 'AI service unavailable. Please try again later.' }),
+        { status: 503 }
+      )
+    }
+    
+    return new Response(
+      JSON.stringify({ error: 'Failed to generate learning path' }),
+      { status: 500 }
+    )
   }
 }

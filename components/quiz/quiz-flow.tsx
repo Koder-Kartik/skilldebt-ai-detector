@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { QuestionCard } from './question-card'
 import { AnalyzingScreen } from './analyzing-screen'
+import { QuizErrorScreen } from './quiz-error-screen'
 import { Spinner } from '@/components/ui/spinner'
 
 interface Question {
@@ -21,17 +22,16 @@ interface Question {
 
 interface QuizFlowProps {
   skillName: string
-  quizSessionId: string
-  onComplete: () => void
+  onComplete: (quizSessionId: string) => void
 }
 
 export function QuizFlow({
   skillName,
-  quizSessionId,
   onComplete,
 }: QuizFlowProps) {
   const router = useRouter()
   const [questions, setQuestions] = useState<Question[]>([])
+  const [quizSessionId, setQuizSessionId] = useState<string>('')
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -42,6 +42,7 @@ export function QuizFlow({
   useEffect(() => {
     const generateQuestions = async () => {
       try {
+        console.log('[v0] Starting quiz generation for skill:', skillName)
         const response = await fetch('/api/quiz/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -49,16 +50,34 @@ export function QuizFlow({
         })
 
         if (!response.ok) {
-          throw new Error('Failed to generate questions')
+          const errorData = await response.text()
+          console.error('[v0] API error:', response.status, errorData)
+          
+          // Provide context-specific error messages
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('API Key Configuration Error: The AI service credentials are not properly configured.')
+          } else if (response.status === 429) {
+            throw new Error('Rate Limit Error: Too many requests. Please wait a moment and try again.')
+          } else if (response.status === 500) {
+            throw new Error('Service Error: The question generation service encountered an error. Please try again later.')
+          } else {
+            throw new Error(`Failed to generate questions: ${response.statusText}`)
+          }
         }
 
-        const text = await response.text()
-        const questionsData = JSON.parse(text)
-        setQuestions(questionsData)
+        const data = await response.json()
+        console.log('[v0] Quiz data received:', { sessionId: data.quizSessionId, questionCount: data.questions?.length })
+        
+        if (!data.quizSessionId || !data.questions || data.questions.length === 0) {
+          throw new Error('Invalid response from server: Missing quiz data')
+        }
+        
+        setQuizSessionId(data.quizSessionId)
+        setQuestions(data.questions)
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Failed to load questions'
-        )
+        const errorMsg = err instanceof Error ? err.message : 'An unexpected error occurred while generating questions'
+        console.error('[v0] Quiz generation error:', errorMsg)
+        setError(errorMsg)
       } finally {
         setIsLoading(false)
       }
@@ -88,8 +107,15 @@ export function QuizFlow({
   }
 
   const handleSubmit = async () => {
+    if (!quizSessionId) {
+      setError('Quiz session not initialized')
+      return
+    }
+
     setIsAnalyzing(true)
     try {
+      console.log('[v0] Submitting quiz answers for session:', quizSessionId)
+      
       const quizAnswers = questions.map((q, idx) => ({
         questionNumber: q.number,
         topic: q.topic,
@@ -108,14 +134,17 @@ export function QuizFlow({
       })
 
       if (!response.ok) {
-        throw new Error('Failed to analyze quiz')
+        const errorData = await response.text()
+        console.error('[v0] Analysis error:', response.status, errorData)
+        throw new Error(`Failed to analyze quiz: ${response.statusText}`)
       }
 
-      onComplete()
+      console.log('[v0] Quiz analysis complete')
+      onComplete(quizSessionId)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to submit quiz'
-      )
+      const errorMsg = err instanceof Error ? err.message : 'Failed to submit quiz'
+      console.error('[v0] Quiz submit error:', errorMsg)
+      setError(errorMsg)
       setIsAnalyzing(false)
     }
   }
@@ -135,13 +164,29 @@ export function QuizFlow({
     return <AnalyzingScreen />
   }
 
-  if (error || questions.length === 0) {
+  if (error) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-12 text-center">
-        <p className="mb-4 text-red-600">{error || 'Failed to load quiz'}</p>
-        <Button onClick={() => router.back()} variant="outline">
-          Go Back
-        </Button>
+      <QuizErrorScreen
+        error={error}
+        onRetry={() => {
+          setError(null)
+          setIsLoading(true)
+          // Trigger re-fetch by resetting state
+          setQuestions([])
+          setQuizSessionId('')
+        }}
+        showRetry={true}
+      />
+    )
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <Spinner className="mx-auto mb-4 h-8 w-8" />
+          <p className="text-gray-600">Loading assessment questions...</p>
+        </div>
       </div>
     )
   }
