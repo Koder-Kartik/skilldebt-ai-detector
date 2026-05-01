@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { QuestionCard } from './question-card'
 import { AnalyzingScreen } from './analyzing-screen'
+import { QuizErrorScreen } from './quiz-error-screen'
 import { Spinner } from '@/components/ui/spinner'
 
 interface Question {
@@ -51,16 +52,30 @@ export function QuizFlow({
         if (!response.ok) {
           const errorData = await response.text()
           console.error('[v0] API error:', response.status, errorData)
-          throw new Error(`Failed to generate questions: ${response.statusText}`)
+          
+          // Provide context-specific error messages
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('API Key Configuration Error: The AI service credentials are not properly configured.')
+          } else if (response.status === 429) {
+            throw new Error('Rate Limit Error: Too many requests. Please wait a moment and try again.')
+          } else if (response.status === 500) {
+            throw new Error('Service Error: The question generation service encountered an error. Please try again later.')
+          } else {
+            throw new Error(`Failed to generate questions: ${response.statusText}`)
+          }
         }
 
         const data = await response.json()
         console.log('[v0] Quiz data received:', { sessionId: data.quizSessionId, questionCount: data.questions?.length })
         
+        if (!data.quizSessionId || !data.questions || data.questions.length === 0) {
+          throw new Error('Invalid response from server: Missing quiz data')
+        }
+        
         setQuizSessionId(data.quizSessionId)
         setQuestions(data.questions)
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to load questions'
+        const errorMsg = err instanceof Error ? err.message : 'An unexpected error occurred while generating questions'
         console.error('[v0] Quiz generation error:', errorMsg)
         setError(errorMsg)
       } finally {
@@ -149,13 +164,29 @@ export function QuizFlow({
     return <AnalyzingScreen />
   }
 
-  if (error || questions.length === 0) {
+  if (error) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-12 text-center">
-        <p className="mb-4 text-red-600">{error || 'Failed to load quiz'}</p>
-        <Button onClick={() => router.back()} variant="outline">
-          Go Back
-        </Button>
+      <QuizErrorScreen
+        error={error}
+        onRetry={() => {
+          setError(null)
+          setIsLoading(true)
+          // Trigger re-fetch by resetting state
+          setQuestions([])
+          setQuizSessionId('')
+        }}
+        showRetry={true}
+      />
+    )
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <Spinner className="mx-auto mb-4 h-8 w-8" />
+          <p className="text-gray-600">Loading assessment questions...</p>
+        </div>
       </div>
     )
   }
