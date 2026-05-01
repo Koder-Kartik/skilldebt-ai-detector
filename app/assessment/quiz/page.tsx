@@ -26,67 +26,13 @@ function QuizPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const skillName = searchParams.get('skill')
-  const [quizSessionId, setQuizSessionId] = useState<string | null>(null)
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const initializeQuiz = async () => {
-      if (!skillName) {
-        router.push('/assessment')
-        return
-      }
-
-      try {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-          router.push('/auth/login')
-          return
-        }
-
-        // Create quiz session
-        const { data, error } = await supabase
-          .from('quiz_sessions')
-          .insert({
-            user_id: user.id,
-            skill_name: skillName,
-            diagnosis_method: 'quiz',
-            quiz_type: 'comprehensive',
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-        setQuizSessionId(data.id)
-      } catch (err) {
-        console.error('[v0] Quiz initialization error:', err)
-        router.push('/assessment')
-      } finally {
-        setIsLoading(false)
-      }
+    if (!skillName) {
+      router.push('/assessment')
     }
-
-    initializeQuiz()
   }, [skillName, router])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-svh bg-gray-50">
-        <DashboardHeader />
-        <main className="flex items-center justify-center py-12">
-          <p className="text-gray-600">Initializing quiz...</p>
-        </main>
-      </div>
-    )
-  }
-
-  if (!quizSessionId) {
-    return null
-  }
 
   if (quizResult) {
     return (
@@ -113,22 +59,28 @@ function QuizPageContent() {
       <main>
         <QuizFlow
           skillName={skillName || ''}
-          quizSessionId={quizSessionId}
-          onComplete={async () => {
+          onComplete={async (completedSessionId: string) => {
+            console.log('[v0] Quiz completed, fetching results for session:', completedSessionId)
             // Fetch the quiz result
             const supabase = createClient()
-            const { data } = await supabase
+            const { data, error } = await supabase
               .from('quiz_sessions')
               .select('*')
-              .eq('id', quizSessionId)
+              .eq('id', completedSessionId)
               .single()
+
+            if (error) {
+              console.error('[v0] Error fetching quiz session:', error)
+              return
+            }
 
             if (data) {
               const { data: gaps } = await supabase
                 .from('quiz_gaps')
                 .select('*')
-                .eq('quiz_session_id', quizSessionId)
+                .eq('quiz_session_id', completedSessionId)
 
+              console.log('[v0] Quiz results fetched:', { score: data.score, gaps: gaps?.length })
               setQuizResult({
                 score: data.score,
                 correctAnswers: data.correct_answers,
