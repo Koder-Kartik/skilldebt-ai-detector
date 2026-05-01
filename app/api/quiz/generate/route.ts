@@ -39,9 +39,9 @@ export async function POST(req: NextRequest) {
       throw sessionError
     }
 
-    // Generate questions using AI
+    // Generate questions using AI (using AI Gateway)
     const { text } = await generateText({
-      model: 'openai/gpt-4o-mini',
+      model: 'openai/gpt-4-turbo',
       system: `You are an expert assessment specialist. Generate exactly 5 multiple-choice questions to assess someone's understanding of ${skillName}. 
       
 Return a JSON array with exactly this structure for each question:
@@ -119,9 +119,23 @@ Ensure:
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     )
   } catch (error) {
-    console.error('[v0] Quiz generation error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[v0] Quiz generation error:', {
+      message: errorMessage,
+      skill: skillName,
+      timestamp: new Date().toISOString(),
+    })
+    
+    // Provide more specific error messages
+    if (errorMessage.includes('API') || errorMessage.includes('auth')) {
+      return new Response(
+        JSON.stringify({ error: 'AI service configuration issue. Please contact support.' }),
+        { status: 503 }
+      )
+    }
+    
     return new Response(
-      JSON.stringify({ error: 'Failed to generate quiz' }),
+      JSON.stringify({ error: 'Failed to generate quiz. Please try again.' }),
       { status: 500 }
     )
   }

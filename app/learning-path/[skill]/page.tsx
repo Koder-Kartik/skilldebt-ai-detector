@@ -63,6 +63,7 @@ export default function LearningPathPage() {
           setPathData(JSON.parse(existingPath.path_content))
         } else {
           // Generate new path
+          console.log('[v0] Generating learning path for skill:', skill)
           const response = await fetch('/api/learning-path', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -74,14 +75,19 @@ export default function LearningPathPage() {
           })
 
           if (!response.ok) {
-            throw new Error('Failed to generate learning path')
+            const errorText = await response.text()
+            console.error('[v0] Learning path API error:', response.status, errorText)
+            throw new Error(`Failed to generate learning path: ${response.statusText}`)
           }
 
           const data = await response.json()
+          console.log('[v0] Learning path generated successfully')
           setPathData(data)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
+        const errorMsg = err instanceof Error ? err.message : 'An error occurred'
+        console.error('[v0] Learning path loading error:', errorMsg)
+        setError(errorMsg)
       } finally {
         setIsLoading(false)
       }
