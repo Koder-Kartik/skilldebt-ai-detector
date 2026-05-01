@@ -20,6 +20,8 @@ import {
   isApproachingQuotaLimit,
   generateRateLimitErrorMessage,
 } from '@/lib/email-rate-limit'
+import { validateSignupForm, validatePassword } from '@/lib/auth-validators'
+import { PasswordStrengthIndicator } from '@/components/password-strength-indicator'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -27,6 +29,7 @@ export default function SignUpPage() {
   const [repeatPassword, setRepeatPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -36,9 +39,12 @@ export default function SignUpPage() {
     setIsLoading(true)
     setError(null)
     setWarning(null)
+    setFieldErrors({})
 
-    if (password !== repeatPassword) {
-      setError('Passwords do not match')
+    // Validate form
+    const validation = validateSignupForm(email, password, repeatPassword)
+    if (!validation.isValid) {
+      setFieldErrors(validation.errors)
       setIsLoading(false)
       return
     }
@@ -113,7 +119,12 @@ export default function SignUpPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      aria-invalid={!!fieldErrors.email}
+                      className={fieldErrors.email ? 'border-red-500' : ''}
                     />
+                    {fieldErrors.email && (
+                      <p className="text-xs text-red-600">{fieldErrors.email}</p>
+                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">Password</Label>
@@ -123,17 +134,31 @@ export default function SignUpPage() {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      aria-invalid={!!fieldErrors.password}
+                      className={fieldErrors.password ? 'border-red-500' : ''}
                     />
+                    {password && <PasswordStrengthIndicator password={password} showDetails={true} />}
+                    {fieldErrors.password && (
+                      <p className="text-xs text-red-600">{fieldErrors.password}</p>
+                    )}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="repeat-password">Repeat Password</Label>
+                    <Label htmlFor="repeat-password">Confirm Password</Label>
                     <Input
                       id="repeat-password"
                       type="password"
                       required
                       value={repeatPassword}
                       onChange={(e) => setRepeatPassword(e.target.value)}
+                      aria-invalid={!!fieldErrors.confirmPassword}
+                      className={fieldErrors.confirmPassword ? 'border-red-500' : ''}
                     />
+                    {repeatPassword && password === repeatPassword && (
+                      <p className="text-xs text-green-600">Passwords match</p>
+                    )}
+                    {fieldErrors.confirmPassword && (
+                      <p className="text-xs text-red-600">{fieldErrors.confirmPassword}</p>
+                    )}
                   </div>
                   {warning && (
                     <p className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
