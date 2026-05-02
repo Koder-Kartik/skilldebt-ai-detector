@@ -4,8 +4,10 @@ import { groq } from '@ai-sdk/groq'
 import { NextRequest } from 'next/server'
 
 export async function POST(req: NextRequest) {
+  let skillName = 'Unknown'
   try {
-    const { skillName } = await req.json()
+    const body = await req.json()
+    skillName = body.skillName
     
     if (!skillName) {
       return new Response(JSON.stringify({ error: 'Skill name required' }), {
@@ -41,6 +43,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate questions using AI (using Groq - Free!)
+    console.log('[v0] Attempting to generate questions with Groq model...')
+    console.log('[v0] API Key status:', process.env.GROQ_API_KEY ? 'Present' : 'MISSING')
+    console.log('[v0] Using model: mixtral-8x7b-32768')
+    
     const { text } = await generateText({
       model: groq('mixtral-8x7b-32768'),
       system: `You are an expert assessment specialist. Generate exactly 5 multiple-choice questions to assess someone's understanding of ${skillName}. 
@@ -127,16 +133,28 @@ Ensure:
       timestamp: new Date().toISOString(),
     })
     
-    // Provide more specific error messages
-    if (errorMessage.includes('API') || errorMessage.includes('auth')) {
+    // Provide more specific error messages with debugging info
+    if (errorMessage.includes('API') || errorMessage.includes('auth') || errorMessage.includes('403')) {
+      console.error('[v0] API Authentication Issue - Check GROQ_API_KEY')
       return new Response(
-        JSON.stringify({ error: 'AI service configuration issue. Please contact support.' }),
+        JSON.stringify({ 
+          error: 'AI service authentication failed. Verify API key configuration.',
+          details: process.env.GROQ_API_KEY ? 'Key exists but may be invalid' : 'API key not set'
+        }),
         { status: 503 }
       )
     }
     
+    if (errorMessage.includes('JSON')) {
+      console.error('[v0] JSON Parsing Error - AI response format issue')
+      return new Response(
+        JSON.stringify({ error: 'Invalid response format from AI. Try again.' }),
+        { status: 502 }
+      )
+    }
+    
     return new Response(
-      JSON.stringify({ error: 'Failed to generate quiz. Please try again.' }),
+      JSON.stringify({ error: 'Failed to generate quiz. Please try again.', details: errorMessage }),
       { status: 500 }
     )
   }
